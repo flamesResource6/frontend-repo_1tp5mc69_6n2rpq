@@ -1,73 +1,97 @@
-function App() {
+import { useEffect, useMemo, useState } from "react";
+import Header from "./components/Header";
+import MenuList from "./components/MenuList";
+import Cart from "./components/Cart";
+import History from "./components/History";
+
+const API = import.meta.env.VITE_BACKEND_URL || "";
+
+export default function App() {
+  const [tab, setTab] = useState("order");
+  const [cart, setCart] = useState([]);
+  const [seeding, setSeeding] = useState(false);
+
+  // Try to seed menu on first load (helpful in fresh env)
+  useEffect(() => {
+    const seed = async () => {
+      try {
+        setSeeding(true);
+        await fetch(`${API}/api/admin/seed`, { method: "POST" });
+      } catch (e) {
+        console.log(e);
+      } finally {
+        setSeeding(false);
+      }
+    };
+    seed();
+  }, []);
+
+  const addToCart = (item) => {
+    setCart((prev) => {
+      const exists = prev.find((p) => p.id === item.id);
+      if (exists) {
+        return prev.map((p) => (p.id === item.id ? { ...p, quantity: p.quantity + 1 } : p));
+      }
+      return [...prev, { ...item, quantity: 1 }];
+    });
+  };
+
+  const inc = (id) => setCart((prev) => prev.map((p) => (p.id === id ? { ...p, quantity: p.quantity + 1 } : p)));
+  const dec = (id) =>
+    setCart((prev) => prev.flatMap((p) => (p.id === id ? (p.quantity > 1 ? [{ ...p, quantity: p.quantity - 1 }] : []) : [p])));
+
+  const submitOrder = async (total) => {
+    if (cart.length === 0) return;
+    const items = cart.map((c) => ({
+      item_id: c.id,
+      name: c.name,
+      price: c.price,
+      quantity: c.quantity,
+      subtotal: c.price * c.quantity,
+    }));
+    const payload = { items, total };
+    try {
+      const res = await fetch(`${API}/api/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("Failed to submit order");
+      setCart([]);
+      setTab("history");
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_50%)]"></div>
+    <div className="min-h-screen bg-orange-50">
+      <Header />
 
-      <div className="relative min-h-screen flex items-center justify-center p-8">
-        <div className="max-w-2xl w-full">
-          {/* Header with Flames icon */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-6">
-              <img
-                src="/flame-icon.svg"
-                alt="Flames"
-                className="w-24 h-24 drop-shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-              />
-            </div>
-
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Flames Blue
-            </h1>
-
-            <p className="text-xl text-blue-200 mb-6">
-              Build applications through conversation
-            </p>
-          </div>
-
-          {/* Instructions */}
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-8 shadow-xl mb-6">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                1
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Describe your idea</h3>
-                <p className="text-blue-200/80 text-sm">Use the chat panel on the left to tell the AI what you want to build</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4 mb-6">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                2
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Watch it build</h3>
-                <p className="text-blue-200/80 text-sm">Your app will appear in this preview as the AI generates the code</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
-                3
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-1">Refine and iterate</h3>
-                <p className="text-blue-200/80 text-sm">Continue the conversation to add features and make changes</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="text-center">
-            <p className="text-sm text-blue-300/60">
-              No coding required • Just describe what you want
-            </p>
-          </div>
+      <div className="max-w-md mx-auto">
+        <div className="flex p-2 gap-2 sticky top-[64px] bg-orange-50 z-10">
+          <button
+            className={`flex-1 py-2 rounded-xl font-medium ${
+              tab === "order" ? "bg-orange-500 text-white" : "bg-white"
+            }`}
+            onClick={() => setTab("order")}
+          >
+            Order
+          </button>
+          <button
+            className={`flex-1 py-2 rounded-xl font-medium ${
+              tab === "history" ? "bg-orange-500 text-white" : "bg-white"
+            }`}
+            onClick={() => setTab("history")}
+          >
+            History
+          </button>
         </div>
-      </div>
-    </div>
-  )
-}
 
-export default App
+        {tab === "order" ? <MenuList onAdd={addToCart} /> : <History />}
+      </div>
+
+      <Cart cart={cart} onInc={inc} onDec={dec} onSubmit={submitOrder} />
+    </div>
+  );
+}
